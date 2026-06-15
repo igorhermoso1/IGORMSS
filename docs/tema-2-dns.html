@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tema 2 · DNS con bind9 — Zerbitzuak</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+
+<header class="topbar">
+  <a class="brand" href="index.html" style="color:inherit;text-decoration:none"><span class="dot"></span> ZERBITZUAK<b>·lab</b></a>
+  <nav>
+    <a href="index.html">Temario</a>
+    <a href="#registros">Registros</a>
+    <a href="#sim">Simulador</a>
+    <a href="#instalacion">Instalación</a>
+    <a href="#test">Test</a>
+  </nav>
+</header>
+
+<main class="wrap col">
+
+  <p class="eyebrow" style="margin-top:40px">Tema 2 · 2_DNS / 3_AS</p>
+  <h1>DNS: nombres en vez de números</h1>
+  <p class="lead">Nadie quiere memorizar <code class="inline">192.168.4.101</code>. El DNS traduce nombres como <code class="inline">www.miempresa.net</code> a direcciones IP y al revés. En este tema montas tu propio servidor DNS con <b>bind9</b> sobre Ubuntu y creas tu zona.</p>
+
+  <!-- ============ TEORÍA ============ -->
+  <h2>1. Qué resuelve el DNS</h2>
+  <div class="callout analogy">
+    <span class="tag">Analogía</span>
+    <p>La agenda del móvil. Tú marcas "Mamá", no su número. El DNS es esa agenda a escala de Internet: guarda la correspondencia <b>nombre → número</b> para que las personas usemos nombres y las máquinas sigan usando IPs. Cuando añades un contacto nuevo, lo das de alta una vez y todo el mundo puede llamarlo por su nombre.</p>
+  </div>
+  <p>El proceso es jerárquico y se hace por <b>delegación</b>: tu equipo pregunta a su servidor DNS; si este no conoce el nombre, pregunta hacia arriba (raíz → <code class="inline">.net</code> → <code class="inline">miempresa.net</code>) hasta encontrar al servidor <b>autoritario</b> de esa zona, que responde con la IP. El resultado se guarda un tiempo en caché (TTL) para no repetir el viaje.</p>
+
+  <h3>Diagrama: una consulta DNS</h3>
+  <div class="term"><div class="bar"><span class="lights"><i></i><i></i><i></i></span><span class="host">topologia — resolución DNS</span></div>
+<pre><code>  cliente (u20zerbitzuak)        servidor DNS (u18zerbitzaria)
+        │  "¿IP de www.josebabilbao.net?"   │
+        │ ─────────────────────────────────▶│  busca en su zona
+        │                                   │  www → CNAME → A → 192.168.4.101
+        │ ◀─────────────────────────────────│  "es 192.168.4.101"
+        ▼
+   guarda en caché (TTL) y conecta</code></pre></div>
+
+  <!-- ============ TEORÍA: registros ============ -->
+  <h2 id="registros">2. Registros de recursos (RR)</h2>
+  <p>Una zona DNS es un fichero de texto lleno de registros. Cada registro tiene la forma <code class="inline">Propietario · TTL · Clase · Tipo · RDATA</code>. La clase casi siempre es <code class="inline">IN</code> (Internet). Los tipos que usarás:</p>
+  <table class="data">
+    <tr><th>Tipo</th><th>Para qué</th><th>Ejemplo (RDATA)</th></tr>
+    <tr><td class="mono">SOA</td><td>Inicio de la zona: servidor autoritario y parámetros</td><td class="mono">serial, refresh, retry…</td></tr>
+    <tr><td class="mono">NS</td><td>Servidores de nombres de la zona</td><td class="mono">u18zerbitzaria.</td></tr>
+    <tr><td class="mono">A</td><td>Nombre → dirección IPv4</td><td class="mono">192.168.4.111</td></tr>
+    <tr><td class="mono">PTR</td><td>IP → nombre (resolución inversa)</td><td class="mono">w10zer.josebabilbao.net.</td></tr>
+    <tr><td class="mono">CNAME</td><td>Alias de otro nombre</td><td class="mono">www → u18zerbitzaria</td></tr>
+    <tr><td class="mono">MX</td><td>Servidor de correo del dominio</td><td class="mono">10 u18zerbitzaria</td></tr>
+    <tr><td class="mono">TXT</td><td>Texto libre (verificaciones, SPF…)</td><td class="mono">"v=spf1 …"</td></tr>
+  </table>
+  <div class="callout">
+    <span class="tag">Nota · ¿por qué dos zonas?</span>
+    <p>La <b>zona directa</b> resuelve nombre → IP (registros A). La <b>zona inversa</b> resuelve IP → nombre (registros PTR) y vive en un dominio especial <code class="inline">in-addr.arpa</code> con los octetos al revés. Son ficheros distintos porque responden preguntas opuestas.</p>
+  </div>
+
+  <!-- ============ SIMULADOR ============ -->
+  <div class="sim" id="sim">
+    <div class="sim-head"><span class="dot"></span><h3>Simulador · Resolutor de zona DNS</h3></div>
+    <div class="sim-body">
+      <p style="margin-top:0;color:var(--ink-dim);font-size:14px">Esta es una zona como la que vas a crear. Edítala si quieres, escribe un nombre o una IP y el simulador resuelve como lo haría bind9: sigue los CNAME y muestra la cadena. La consulta inversa busca el PTR.</p>
+      <div class="field"><label>Dominio (origin)</label><input id="dns-origin" value="josebabilbao.net"></div>
+      <div class="field"><label>Fichero de zona</label>
+        <textarea id="dns-zone" spellcheck="false" style="width:100%;min-height:170px;font-family:var(--mono);font-size:13px;color:var(--ink);background:#07101e;border:1px solid var(--line);border-radius:8px;padding:11px;line-height:1.6">@               IN  SOA u18zerbitzaria. admin.josebabilbao.net. ( 1 6h 1h 1w 1d )
+@               IN  NS  u18zerbitzaria.
+@               IN  A   192.168.4.101
+u18zerbitzaria  IN  A   192.168.4.101
+w10zer          IN  A   192.168.4.111
+u20zer          IN  A   192.168.4.112
+www             IN  CNAME u18zerbitzaria
+@               IN  MX  10 u18zerbitzaria</textarea></div>
+      <div class="field"><label>Consulta (nombre como www.josebabilbao.net  ·  o una IP para inversa)</label><input id="dns-q" value="www.josebabilbao.net"></div>
+      <div class="btn-row">
+        <button class="btn" id="dns-go">Resolver</button>
+        <button class="btn ghost" id="dns-reset">Reset</button>
+      </div>
+      <div class="out" id="dns-out" style="display:none"></div>
+    </div>
+  </div>
+
+  <!-- ============ INSTALACIÓN ============ -->
+  <h2 id="instalacion">3. Instalación paso a paso (Ubuntu · bind9)</h2>
+  <p>Trabajamos sobre tres VMs del Tema 0: <code class="inline">u18zerbitzaria</code> será el <b>servidor DNS</b> (ejemplo <code class="inline">192.168.4.101</code>); <code class="inline">w10zerbitzuak</code> (<code class="inline">192.168.4.111</code>) y <code class="inline">u20zerbitzuak</code> (<code class="inline">192.168.4.112</code>) serán los <b>clientes</b>. Cambia el nombre de dominio por el tuyo (<code class="inline">nombreapellido.net</code>).</p>
+
+  <h3>3.1 · Instalar bind9 en el servidor</h3>
+  <div class="term"><div class="bar"><span class="lights"><i></i><i></i><i></i></span><span class="host">u18zerbitzaria</span><button class="copy">copiar</button></div>
+<pre><code><span class="prompt">$ </span><span class="cmd">sudo apt update && sudo apt install -y bind9 bind9utils dnsutils</span></code></pre></div>
+  <p>Después, en las conexiones de red del servidor, pon como <b>DNS</b> su propia IP (<code class="inline">192.168.4.101</code>): se resolverá a sí mismo.</p>
+
+  <h3>3.2 · Declarar la zona directa</h3>
+  <p>Edita <code class="inline">/etc/bind/named.conf.local</code> y declara tu zona apuntando a su fichero de datos.</p>
+  <div class="term"><div class="bar"><span class="lights"><i></i><i></i><i></i></span><span class="host">u18zerbitzaria</span><button class="copy">copiar</button></div>
+<pre><code><span class="prompt">$ </span><span class="cmd">sudo nano /etc/bind/named.conf.local</span></code></pre></div>
+  <div class="term"><div class="bar"><span class="lights"><i></i><i></i><i></i></span><span class="host">/etc/bind/named.conf.local</span><button class="copy">copiar</button></div>
+<pre><code><span class="cmd">zone "josebabilbao.net" {
+    type master;
+    file "/etc/bind/db.josebabilbao";
+};</span></code></pre></div>
+
+  <h3>3.3 · Crear y editar el fichero de zona</h3>
+  <p>Copia la plantilla <code class="inline">db.local</code> y edítala con tus datos.</p>
+  <div class="term"><div class="bar"><span class="lights"><i></i><i></i><i></i></span><span class="host">u18zerbitzaria</span><button class="copy">copiar</button></div>
+<pre><code><span class="prompt">$ </span><span class="cmd">cd /etc/bind</span>
+<span class="prompt">$ </span><span class="cmd">sudo cp db.local db.josebabilbao</span>
+<span class="prompt">$ </span><span class="cmd">sudo nano db.josebabilbao</span></code></pre></div>
+  <p>Dentro, sustituye <code class="inline">localhost</code> por tu dominio, <code class="inline">127.0.0.1</code> por la IP del servidor y añade un registro A por cada cliente:</p>
+  <div class="term"><div class="bar"><span class="lights"><i></i><i></i><i></i></span><span class="host">/etc/bind/db.josebabilbao</span><button class="copy">copiar</button></div>
+<pre><code><span class="cmd">$TTL    604800
+@       IN      SOA     josebabilbao.net. admin.josebabilbao.net. (
+                          2         ; Serial (súbelo en cada cambio)
+                     604800         ; Refresh
+                      86400         ; Retry
+                    2419200         ; Expire
+                     604800 )       ; Negative Cache TTL
+@       IN      NS      josebabilbao.net.
+@       IN      A       192.168.4.101
+w10zer  IN      A       192.168.4.111
+u20zer  IN      A       192.168.4.112</span></code></pre></div>
+  <div class="callout warn"><span class="tag">Error común</span><p>Olvidar el <b>punto final</b> en los nombres absolutos (<code class="inline">josebabilbao.net.</code>) o no subir el <b>Serial</b> tras editar. Sin subir el serial, los clientes seguirán viendo la versión antigua en caché.</p></div>
+
+  <h3>3.4 · Reiniciar y comprobar</h3>
+  <div class="term"><div class="bar"><span class="lights"><i></i><i></i><i></i></span><span class="host">u18zerbitzaria</span><button class="copy">copiar</button></div>
+<pre><code><span class="prompt">$ </span><span class="cmd">sudo named-checkzone josebabilbao.net /etc/bind/db.josebabilbao</span>
+<span class="prompt">$ </span><span class="cmd">sudo systemctl restart bind9</span>
+<span class="prompt">$ </span><span class="cmd">sudo systemctl status bind9</span>
+<span class="cmt"># probar la resolución contra tu propio servidor</span>
+<span class="prompt">$ </span><span class="cmd">host josebabilbao.net 192.168.4.101</span>
+<span class="prompt">$ </span><span class="cmd">host w10zer.josebabilbao.net 192.168.4.101</span></code></pre></div>
+  <div class="callout"><span class="tag">Nota · nombre del servicio</span><p>En Ubuntu 18/20 el servicio es <code class="inline">bind9</code> (también vale <code class="inline">sudo service bind9 restart</code>). En 22.04+ la unidad puede llamarse <code class="inline">named</code>: usa <code class="inline">sudo systemctl restart named</code> si <code class="inline">bind9</code> no existe.</p></div>
+
+  <h3>3.5 · Zona inversa (IP → nombre)</h3>
+  <p>Añade una segunda zona en <code class="inline">named.conf.local</code> para la red <code class="inline">192</code>:</p>
+  <div class="term"><div class="bar"><span class="lights"><i></i><i></i><i></i></span><span class="host">/etc/bind/named.conf.local</span><button class="copy">copiar</button></div>
+<pre><code><span class="cmd">zone "192.in-addr.arpa" {
+    type master;
+    file "/etc/bind/db.192";
+};</span></code></pre></div>
+  <div class="term"><div class="bar"><span class="lights"><i></i><i></i><i></i></span><span class="host">u18zerbitzaria</span><button class="copy">copiar</button></div>
+<pre><code><span class="prompt">$ </span><span class="cmd">sudo cp /etc/bind/db.127 /etc/bind/db.192</span>
+<span class="prompt">$ </span><span class="cmd">sudo nano /etc/bind/db.192</span></code></pre></div>
+  <p>Sustituye <code class="inline">localhost</code> por tu dominio y crea los PTR con los <b>octetos al revés</b> (sin el <code class="inline">192</code> inicial, que ya está en el nombre de la zona). Para <code class="inline">192.168.4.111</code> el propietario es <code class="inline">111.4.168</code>:</p>
+  <div class="term"><div class="bar"><span class="lights"><i></i><i></i><i></i></span><span class="host">/etc/bind/db.192</span><button class="copy">copiar</button></div>
+<pre><code><span class="cmd">$TTL    604800
+@       IN      SOA     josebabilbao.net. admin.josebabilbao.net. ( 2 604800 86400 2419200 604800 )
+@       IN      NS      josebabilbao.net.
+101.4.168   IN  PTR     josebabilbao.net.
+111.4.168   IN  PTR     w10zer.josebabilbao.net.
+112.4.168   IN  PTR     u20zer.josebabilbao.net.</span></code></pre></div>
+  <div class="term"><div class="bar"><span class="lights"><i></i><i></i><i></i></span><span class="host">u18zerbitzaria</span><button class="copy">copiar</button></div>
+<pre><code><span class="prompt">$ </span><span class="cmd">sudo systemctl restart bind9</span>
+<span class="prompt">$ </span><span class="cmd">host 192.168.4.111 192.168.4.101</span>   <span class="cmt"># debe devolver w10zer.josebabilbao.net</span></code></pre></div>
+
+  <h3>3.6 · Apuntar los clientes al servidor</h3>
+  <p>En <code class="inline">u20zerbitzuak</code> y <code class="inline">w10zerbitzuak</code>, pon como <b>DNS primario</b> la IP del servidor (<code class="inline">192.168.4.101</code>) y como secundario <code class="inline">8.8.8.8</code>. Comprueba:</p>
+  <div class="term"><div class="bar"><span class="lights"><i></i><i></i><i></i></span><span class="host">u20zerbitzuak — cliente</span><button class="copy">copiar</button></div>
+<pre><code><span class="prompt">$ </span><span class="cmd">ping -c2 u20zer.josebabilbao.net</span>
+<span class="prompt">$ </span><span class="cmd">host josebabilbao.net</span></code></pre></div>
+  <div class="callout warn"><span class="tag">Si el ping falla</span><p>Quita temporalmente el DNS secundario <code class="inline">8.8.8.8</code> para forzar que pregunte solo a tu servidor; vuélvelo a poner luego. En el cliente Windows, desactiva el cortafuegos si bloquea las respuestas.</p></div>
+
+  <!-- ============ EJERCICIOS ============ -->
+  <h2 id="ejercicios">4. Ejercicios</h2>
+  <div class="levels">
+    <details class="level" data-lv="1" open>
+      <summary><span class="lv">Nivel 1 · Reproducir</span> Resolver en el simulador <span class="chev">›</span></summary>
+      <div class="body">
+        <p>Con la zona por defecto del simulador, consulta <code class="inline">w10zer.josebabilbao.net</code>, <code class="inline">www.josebabilbao.net</code> y la IP <code class="inline">192.168.4.112</code>.</p>
+        <p class="success"><b>Cómo sabes que está bien:</b> www llega a la IP del servidor pasando por un CNAME, y la consulta inversa de .112 devuelve u20zer.</p>
+      </div>
+    </details>
+    <details class="level" data-lv="2">
+      <summary><span class="lv">Nivel 2 · Modificar</span> Añadir un host <span class="chev">›</span></summary>
+      <div class="body">
+        <p>En el simulador añade <code class="inline">u22 IN A 192.168.4.113</code> y un alias <code class="inline">intranet IN CNAME u22</code>. Resuelve <code class="inline">intranet.josebabilbao.net</code>.</p>
+        <p class="success"><b>Cómo sabes que está bien:</b> intranet → u22 → 192.168.4.113. Luego replica ese cambio en tu <code class="inline">db</code> real y reinicia bind9.</p>
+      </div>
+    </details>
+    <details class="level" data-lv="3">
+      <summary><span class="lv">Nivel 3 · Crear</span> Tu zona completa (3_AS) <span class="chev">›</span></summary>
+      <div class="body">
+        <p>Sobre <code class="inline">u18zerbitzaria</code>, monta bind9 con tu dominio <code class="inline">nombreapellido.net</code>, zona directa con los tres equipos y zona inversa funcionando.</p>
+        <p class="success"><b>Cómo sabes que está bien:</b> desde un cliente, <code class="inline">host nombreapellido.net</code> y <code class="inline">host w10zer.nombreapellido.net</code> resuelven, y <code class="inline">host 192.168.4.111</code> devuelve el nombre.</p>
+      </div>
+    </details>
+    <details class="level" data-lv="4">
+      <summary><span class="lv">Nivel 4 · Desafío</span> Reenviadores y MX <span class="chev">›</span></summary>
+      <div class="body">
+        <p>Configura un <b>forwarder</b> en <code class="inline">named.conf.options</code> para que tu DNS resuelva también nombres de Internet a través de <code class="inline">8.8.8.8</code>, y añade un registro <code class="inline">MX</code> para tu dominio. Sin solución proporcionada.</p>
+      </div>
+    </details>
+  </div>
+
+  <!-- ============ TEST ============ -->
+  <h2 id="test">5. Autoevaluación</h2>
+  <div class="quiz" data-tema="2" data-pass="0.7">
+    <div class="q-head"><h3>Comprueba el Tema 2</h3><span class="score">—</span></div>
+
+    <div class="q" data-correct="b">
+      <p class="stem">¿Qué tipo de registro asocia un <b>nombre con una IPv4</b>?</p>
+      <label class="opt"><input type="radio" name="q2a" value="a">PTR</label>
+      <label class="opt"><input type="radio" name="q2a" value="b">A</label>
+      <label class="opt"><input type="radio" name="q2a" value="c">MX</label>
+      <p class="explain">A (Address) = nombre → IPv4. El PTR hace lo inverso, IP → nombre.</p>
+    </div>
+
+    <div class="q" data-correct="c">
+      <p class="stem">¿En qué fichero declaras tu zona <b>josebabilbao.net</b>?</p>
+      <label class="opt"><input type="radio" name="q2b" value="a">/etc/bind/db.local</label>
+      <label class="opt"><input type="radio" name="q2b" value="b">/etc/resolv.conf</label>
+      <label class="opt"><input type="radio" name="q2b" value="c">/etc/bind/named.conf.local</label>
+      <p class="explain">En <code class="inline">named.conf.local</code> se declaran las zonas; los datos van en el fichero <code class="inline">db.*</code> que indica esa declaración.</p>
+    </div>
+
+    <div class="q" data-correct="a">
+      <p class="stem">Para la IP <b>192.168.4.111</b> en la zona inversa <code class="inline">192.in-addr.arpa</code>, ¿cuál es el propietario del PTR?</p>
+      <label class="opt"><input type="radio" name="q2c" value="a">111.4.168</label>
+      <label class="opt"><input type="radio" name="q2c" value="b">192.168.4.111</label>
+      <label class="opt"><input type="radio" name="q2c" value="c">168.4.111</label>
+      <p class="explain">Se escriben los octetos al revés y se omite el 192 (ya está en el nombre de la zona): 111.4.168.</p>
+    </div>
+
+    <div class="q" data-correct="b">
+      <p class="stem">Editas la zona pero los clientes siguen viendo datos viejos. ¿Qué olvidaste?</p>
+      <label class="opt"><input type="radio" name="q2d" value="a">Instalar dnsutils</label>
+      <label class="opt"><input type="radio" name="q2d" value="b">Subir el Serial del SOA y reiniciar bind9</label>
+      <label class="opt"><input type="radio" name="q2d" value="c">Cambiar la puerta de enlace</label>
+      <p class="explain">El Serial avisa de que la zona cambió; sin subirlo (y reiniciar) se sirve la versión cacheada.</p>
+    </div>
+
+    <div class="q-foot">
+      <button class="btn" data-grade>Corregir</button>
+      <div class="result"></div>
+    </div>
+  </div>
+
+  <div class="complete-bar">
+    <p>Servidor DNS montado y test superado: marca el tema y enciende el enlace al Tema 3.</p>
+    <button class="btn ghost" data-complete="2">Marcar como completado</button>
+  </div>
+
+  <div class="pager">
+    <a href="tema-1-tcpip.html"><small>Anterior</small><span>‹ Tema 1 · TCP/IP</span></a>
+    <a class="next" href="tema-3-dhcp.html"><small>Siguiente</small><span>Tema 3 · DHCP ›</span></a>
+  </div>
+
+</main>
+
+<footer class="site"><div class="wrap"><span>Tema 2 · DNS con bind9</span><span>Zerbitzuak·lab</span></div></footer>
+
+<script src="assets/app.js"></script>
+<script>
+/* ---------- Simulador: resolutor de zona DNS ---------- */
+function fqdn(name, origin){
+  name = name.trim().replace(/\.$/,"");
+  origin = origin.replace(/\.$/,"");
+  if(name === "@") return origin + ".";
+  if(name === origin || name.endsWith("." + origin)) return name + ".";
+  return name + "." + origin + ".";
+}
+function parseZone(text, origin){
+  const A = {}, CNAME = {}, PTR = {}; // PTR: ip -> name (derivado de A)
+  origin = origin.replace(/\.$/,"");
+  text.split("\n").forEach(line => {
+    line = line.split(";")[0].trim();
+    if(!line) return;
+    const tok = line.split(/\s+/);
+    // formato: owner [TTL] IN TYPE rdata...   (toleramos sin TTL)
+    const owner = tok[0];
+    const inIdx = tok.indexOf("IN");
+    if(inIdx === -1) return;
+    const type = tok[inIdx+1];
+    const rdata = tok.slice(inIdx+2);
+    if(type === "A"){
+      const name = fqdn(owner, origin), ip = rdata[0];
+      A[name] = ip; if(!PTR[ip]) PTR[ip] = name;
+    } else if(type === "CNAME"){
+      CNAME[fqdn(owner, origin)] = fqdn(rdata[0], origin);
+    }
+  });
+  return { A, CNAME, PTR };
+}
+const dnsOut = document.getElementById("dns-out");
+function resolveDns(){
+  const origin = document.getElementById("dns-origin").value.trim();
+  const z = parseZone(document.getElementById("dns-zone").value, origin);
+  const q = document.getElementById("dns-q").value.trim();
+  dnsOut.style.display = "block";
+  const row = (k,v,c) => `<div class="row"><span class="k">${k}</span><span class="v ${c||''}">${v}</span></div>`;
+
+  // ¿es una IP? -> inversa (PTR)
+  if(/^\d{1,3}(\.\d{1,3}){3}$/.test(q)){
+    const name = z.PTR[q];
+    dnsOut.innerHTML = row("Consulta inversa (PTR)", q) +
+      (name ? row("Nombre", name.replace(/\.$/,""), "")
+            : `<div class="row"><span class="k">Resultado</span><span class="v" style="color:var(--danger)">sin PTR para esa IP</span></div>`);
+    return;
+  }
+
+  // nombre -> seguir CNAME hasta A
+  let cur = fqdn(q, origin), chain = [], guard = 0;
+  while(z.CNAME[cur] && guard++ < 10){ chain.push(cur + " → " + z.CNAME[cur].replace(/\.$/,"")); cur = z.CNAME[cur]; }
+  const ip = z.A[cur];
+  let html = row("Consulta", q);
+  if(chain.length) html += row("Cadena CNAME", chain.join("  ·  "));
+  if(ip) html += row("Registro A", cur.replace(/\.$/,"") + " = " + ip) + row("Resultado", ip, "");
+  else html += `<div class="row"><span class="k">Resultado</span><span class="v" style="color:var(--danger)">NXDOMAIN (no existe ese nombre en la zona)</span></div>`;
+  dnsOut.innerHTML = html;
+}
+document.getElementById("dns-go").addEventListener("click", resolveDns);
+document.getElementById("dns-reset").addEventListener("click", () => {
+  document.getElementById("dns-origin").value = "josebabilbao.net";
+  document.getElementById("dns-q").value = "www.josebabilbao.net";
+  document.getElementById("dns-zone").value =
+`@               IN  SOA u18zerbitzaria. admin.josebabilbao.net. ( 1 6h 1h 1w 1d )
+@               IN  NS  u18zerbitzaria.
+@               IN  A   192.168.4.101
+u18zerbitzaria  IN  A   192.168.4.101
+w10zer          IN  A   192.168.4.111
+u20zer          IN  A   192.168.4.112
+www             IN  CNAME u18zerbitzaria
+@               IN  MX  10 u18zerbitzaria`;
+  dnsOut.style.display = "none";
+});
+</script>
+</body>
+</html>

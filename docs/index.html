@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zerbitzuak — Laborategia</title>
+<meta name="description" content="Aprende, instala y practica los servicios de red de la asignatura Zerbitzuak: TCP/IP, DNS, DHCP, SSH, Samba, FTP, correo y web.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+
+<header class="topbar">
+  <span class="brand"><span class="dot"></span> ZERBITZUAK<b>·lab</b></span>
+  <nav>
+    <a href="#temario">Temario</a>
+    <a href="#como">Cómo funciona</a>
+    <a href="#" id="resetLink">Reiniciar progreso</a>
+  </nav>
+</header>
+
+<main class="wrap">
+
+  <section class="hero">
+    <p class="eyebrow">Sareko Zerbitzuak · Servidor Ubuntu</p>
+    <h1>Monta los servicios de red <span class="accent">con tus manos</span>.</h1>
+    <p class="lead sub">Nueve temas, de la máquina virtual vacía al servidor web en producción. Cada tema trae teoría con analogías, instalación paso a paso sobre las VMs reales del aula y ejercicios para comprobar que lo has asimilado.</p>
+  </section>
+
+  <!-- FIRMA: mapa de topología del curso -->
+  <section id="temario" aria-label="Mapa del curso">
+    <svg class="topo" viewBox="0 0 980 380" role="img" aria-label="Ruta de los nueve temas">
+      <!-- enlaces -->
+      <g id="edges" stroke-linecap="round">
+        <line class="edge" data-e="0" x1="90" y1="110" x2="280" y2="110"/>
+        <line class="edge" data-e="1" x1="280" y1="110" x2="470" y2="110"/>
+        <line class="edge" data-e="2" x1="470" y1="110" x2="660" y2="110"/>
+        <line class="edge" data-e="3" x1="660" y1="110" x2="850" y2="110"/>
+        <line class="edge" data-e="4" x1="850" y1="110" x2="850" y2="270"/>
+        <line class="edge" data-e="5" x1="850" y1="270" x2="660" y2="270"/>
+        <line class="edge" data-e="6" x1="660" y1="270" x2="470" y2="270"/>
+        <line class="edge" data-e="7" x1="470" y1="270" x2="280" y2="270"/>
+      </g>
+      <g id="nodes"></g>
+    </svg>
+  </section>
+
+  <!-- Lista accesible / fallback -->
+  <section class="units" id="unitGrid" aria-label="Lista de temas"></section>
+
+  <section id="como" class="col" style="margin-bottom:64px">
+    <h2>Cómo funciona</h2>
+    <p>Cada tema sigue siempre el mismo recorrido para que nunca te pierdas:</p>
+    <ol class="steps">
+      <li><h4>Teoría</h4><p>Primero una analogía del mundo real, luego el concepto técnico y un diagrama. Nada de jerga sin traducir.</p></li>
+      <li><h4>Instalación paso a paso</h4><p>Los comandos exactos sobre las VMs del aula (red <code class="inline">192.168.4.0/24</code>), con botón para copiarlos.</p></li>
+      <li><h4>Ejercicios graduados</h4><p>Del nivel 1 (reproducir) al nivel 4 (desafío). Cada uno te dice cómo saber que lo has hecho bien.</p></li>
+      <li><h4>Autoevaluación</h4><p>Un test corto desbloquea el tema como completado y enciende el enlace al siguiente nodo del mapa.</p></li>
+    </ol>
+  </section>
+
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <span>Material basado en los apuntes de Joseba Mirena Bilbao Requena (CC BY-NC-SA 2.5).</span>
+    <span>Herramienta de estudio · Zerbitzuak</span>
+  </div>
+</footer>
+
+<script src="assets/app.js"></script>
+<script>
+// Definición de los temas. href=null → todavía no publicado (bloqueado).
+const TEMAS = [
+  { id:"0", x:90,  y:110, abbr:"VM·IP",  name:"Máquinas virtuales + IPs", href:"tema-0-vm-ip.html" },
+  { id:"1", x:280, y:110, abbr:"TCP/IP", name:"TCP/IP y enrutamiento",     href:"tema-1-tcpip.html" },
+  { id:"2", x:470, y:110, abbr:"DNS",    name:"DNS · bind9",               href:"tema-2-dns.html" },
+  { id:"3", x:660, y:110, abbr:"DHCP",   name:"DHCP",                      href:"tema-3-dhcp.html" },
+  { id:"4", x:850, y:110, abbr:"SSH",    name:"Urruneko saioak",           href:"tema-4-urruneko-saioak.html" },
+  { id:"5", x:850, y:270, abbr:"Samba",  name:"Compartir + Proxy",         href:"tema-5-baliabideak.html" },
+  { id:"6", x:660, y:270, abbr:"FTP",    name:"FTP · vsftpd",              href:null },
+  { id:"7", x:470, y:270, abbr:"Posta",  name:"Correo",                    href:null },
+  { id:"8", x:280, y:270, abbr:"Web",    name:"Apache · WordPress · LDAP", href:null },
+];
+
+const SVGNS = "http://www.w3.org/2000/svg";
+const prog = Z.load();
+
+// tema "actual" = primero no completado con página disponible
+let current = TEMAS.find(t => t.href && !prog[t.id])?.id ?? null;
+
+// pintar nodos
+const g = document.getElementById("nodes");
+TEMAS.forEach(t => {
+  const done = !!prog[t.id];
+  const locked = !t.href;
+  const grp = document.createElementNS(SVGNS, "a");
+  if (t.href) grp.setAttributeNS("http://www.w3.org/1999/xlink", "href", t.href);
+  grp.setAttribute("class", "node-hit" + (locked ? " locked" : ""));
+
+  const ring = document.createElementNS(SVGNS, "circle");
+  ring.setAttribute("cx", t.x); ring.setAttribute("cy", t.y); ring.setAttribute("r", 30);
+  ring.setAttribute("class", "ring" + (done ? " done" : "") + (t.id === current ? " current" : ""));
+
+  const num = document.createElementNS(SVGNS, "text");
+  num.setAttribute("x", t.x); num.setAttribute("y", t.y + 6);
+  num.setAttribute("text-anchor", "middle"); num.setAttribute("class", "num");
+  num.textContent = done ? "✓" : t.id;
+
+  const lbl = document.createElementNS(SVGNS, "text");
+  lbl.setAttribute("x", t.x); lbl.setAttribute("y", t.y + 52);
+  lbl.setAttribute("text-anchor", "middle"); lbl.setAttribute("class", "lbl");
+  lbl.textContent = t.abbr;
+
+  grp.append(ring, num, lbl);
+  g.appendChild(grp);
+});
+
+// encender enlaces ya superados
+document.querySelectorAll(".edge").forEach(e => {
+  const i = +e.dataset.e;            // arista i une tema i con i+1
+  if (prog[String(i)]) e.classList.add("done");
+});
+
+// rejilla de tarjetas
+const grid = document.getElementById("unitGrid");
+TEMAS.forEach(t => {
+  const done = !!prog[t.id], locked = !t.href, cur = t.id === current;
+  const el = document.createElement(locked ? "div" : "a");
+  el.className = "unit";
+  if (!locked) el.href = t.href;
+  el.innerHTML = `
+    <span class="t-num">TEMA ${t.id}</span>
+    <h3>${t.name}</h3>
+    <p>${locked ? "Próximamente" : (done ? "Completado. Puedes repasarlo." : "Disponible. Empieza por la teoría.")}</p>
+    <span class="badge ${done ? "done" : (cur ? "current" : "")}">${done ? "hecho" : (locked ? "bloqueado" : (cur ? "actual" : "abierto"))}</span>`;
+  grid.appendChild(el);
+});
+
+document.getElementById("resetLink").addEventListener("click", (e) => {
+  e.preventDefault();
+  if (confirm("¿Borrar tu progreso y reiniciar todos los temas?")) { Z.reset(); location.reload(); }
+});
+</script>
+</body>
+</html>
