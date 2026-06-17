@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="eu">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sareko Lab · Zerbitzuak eta Sarekoak</title>
+<meta name="description" content="Sareko zerbitzuak ikasteko/aprender servicios de red: teoria, komandoak eta ariketa praktikoak (euskeraz eta gaztelaniaz), Ubuntu eta Windows Server.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230e2c59'/%3E%3Crect x='12' y='14' width='40' height='28' rx='3' fill='%23eef1f7' stroke='%231f6fe0' stroke-width='2'/%3E%3Crect x='16' y='18' width='32' height='20' rx='1' fill='%231f6fe0'/%3E%3Crect x='26' y='44' width='12' height='5' fill='%234aa6ff'/%3E%3Crect x='20' y='49' width='24' height='4' rx='2' fill='%23d62839'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+
+<!-- Topbar (móvil) -->
+<header class="topbar">
+  <button class="burger" id="burger" aria-label="Menua">☰</button>
+  <strong>🌐 Zerbitzuak·lab</strong>
+  <span class="tb-coins" id="tb-coins">0 🪙</span>
+</header>
+
+<div class="app">
+
+  <!-- Sidebar -->
+  <aside class="sidebar" id="sidebar">
+    <a class="brand" href="#/">
+      <span class="logo">🌐</span>
+      <span>ZERBITZUAK·lab<small>Sareko zerbitzuak · Ubuntu</small></span>
+    </a>
+
+    <!-- Panel del jugador -->
+    <div class="player">
+      <div class="coins"><span class="c" id="p-coins">0</span> 🪙 <span id="p-coins-l">txanpon</span></div>
+      <div class="lvl" id="p-level">Maila 1</div>
+      <div class="bar"><i id="p-bar"></i></div>
+      <div class="meta"><span id="p-prog-l">0%</span><span id="p-totalprog">Aurrerapena 0%</span></div>
+      <div class="meta"><span>✅ <span id="p-done">0/9</span></span><span id="p-streak">0 🔥</span></div>
+    </div>
+
+    <nav id="sidebar-nav"></nav>
+  </aside>
+  <div class="scrim" id="scrim"></div>
+
+  <!-- Main -->
+  <main class="main">
+    <div class="wrap" id="main-content"></div>
+  </main>
+</div>
+
+<!-- Modal recompensa -->
+<div class="modal" id="modal"><div class="box"></div></div>
+
+<script src="assets/edukiak.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>
